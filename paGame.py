@@ -1,292 +1,193 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8; tab-width: 4; mode: python -*-
+# emacs: -*- mode: python; py-indent-offset: 4; indent-tabs-mode: t -*-
+# vi: set ft=python sts=4 ts=4 sw=4 noet 
 
-import os, sys, pygame, random
+import sys
+
+try:
+	import pygame
+except ImportError, e:
+	print 'Error: no pygame library found'
+	sys.exit(1)
+	
 from pygame.locals import *
- 
-if not pygame.font: print 'estilos y letras desactivadas!'
-if not pygame.mixer: print 'sonidos desactivados!'
 
-# variables
-WIDTH = 640
-HEIGHT = 480
-TEXTCOLOR = (255, 255, 255) # color del texto
-BGCOLOR = (0,0,0) # color del fondo
-ranking = [-100, -100, -100, -100, -100,] # ranking vacío
+if not pygame.font: 
+	print 'Warning: fonts disabled'
+	
+if not pygame.mixer: 
+	print 'Warning: sound disabled'
 
-pygame.init()
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption('paGame 0.0.2')
-pygame.mouse.set_visible(False)
+from loader import Loader
+from constants import WIDTH, HEIGHT, TEXTCOLOR, BGCOLOR
+from system import Gnu, Windows, Apple, Freebsd
+from player import Tux
 
-# fuente
-font = pygame.font.SysFont(None, 48)
-
-# definimos objeto GNU
-class Gnu(pygame.sprite.Sprite):
+class Game:
 	def __init__(self):
-		pygame.sprite.Sprite.__init__(self)
-		self.image = carga_imagen("gnu.png",-1)
-		self.rect = self.image.get_rect()
-		self.rect.centerx = WIDTH - (WIDTH/5)
-		self.rect.centery = HEIGHT / 2
-		self.speed = [0.5, -0.5]
+		''' Init pygame configuration and game initial config '''
+		
+		pygame.init()
+		self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+		pygame.display.set_caption('paGame 0.0.2')
+		pygame.mouse.set_visible(False)
+		
+		self.font = pygame.font.SysFont(None, 48)
+		self.ranking = [-100, -100, -100, -100, -100,]
+		self.score = 0
+		self.running = True
+		
+		self.background_image = Loader().load('bg.jpg')
+		
+		self.gnu = Gnu()
+		self.windows = Windows()
+		self.apple = Apple()
+		self.freebsd = Freebsd()
+		self.tux = Tux(x_position = 100)
+			
+		self.systems = [self.gnu, self.windows, self.apple, self.freebsd, self.tux]
+	
+	def terminate(self):
+		''' Quit the game '''
+		
+		pygame.quit()
+		sys.exit()
+		
+	def drawText(self, text, font, surface, x, y):
+		''' Draw a text on screen '''
+		
+		textobj = font.render(text, 1, TEXTCOLOR)
+		textrect = textobj.get_rect()
+		textrect.topleft = (x,y)
+		surface.blit(textobj, textrect)
+	
+	def main(self):
+		''' Run the game main loop '''
+		
+		while self.running:
+			clock = pygame.time.Clock()
+			self.events = pygame.event.get()
+			time = 0
 
-	def actualizar(self, time, pala_jug):
-		self.rect.centerx += self.speed[0] * time
-		self.rect.centery += self.speed[1] * time
-		if self.rect.left <= 0 or self.rect.right >= WIDTH:
-			self.speed[0] = -self.speed[0]
-			self.rect.centerx += self.speed[0] * time
-		if self.rect.top <= 0 or self.rect.bottom >= HEIGHT:
-			self.speed[1] = -self.speed[1]
-			self.rect.centery += self.speed[1] * time
+			self.show_initial_screen()
+			
+			while self.running:
+	
+				time -= clock.tick(40)
+				self.real_time = 60 + (time / 1000)
+	
+				# Update system objects
+				for system in self.systems:
+					system.update(time, self.tux)
+				
+				self.keys = pygame.key.get_pressed()
+				self.tux.move(time, self.keys)
+				
+				self.screen.blit(self.background_image, (0, 0))
+				
+				for system in self.systems:
+					self.screen.blit(system.image, system.rect)
+				
+				pygame.display.flip()
+	
+				self.check_collide()
+				self.draw_hud()
+				self.check_finished_game()
 
-		if pygame.sprite.collide_rect(self, pala_jug):
-			self.rect.centerx += self.speed[0] * time
-
-# definimos objeto Windos
-class Windos(pygame.sprite.Sprite):
-	def __init__(self):
-		pygame.sprite.Sprite.__init__(self)
-		self.image = carga_imagen("windos.png",-1)
-		self.rect = self.image.get_rect()
-		self.rect.centerx = WIDTH - (2 * WIDTH/5)
-		self.rect.centery = HEIGHT / 3
-		self.speed = [0.5, -0.5]
-
-	def actualizar(self, time, pala_jug):
-		self.rect.centerx += self.speed[0] * time
-		self.rect.centery += self.speed[1] * time
-		if self.rect.left <= 0 or self.rect.right >= WIDTH:
-			self.speed[0] = -self.speed[0]
-			self.rect.centerx += self.speed[0] * time
-		if self.rect.top <= 0 or self.rect.bottom >= HEIGHT:
-			self.speed[1] = -self.speed[1]
-			self.rect.centery += self.speed[1] * time
-
-		if pygame.sprite.collide_rect(self, pala_jug):
-			self.rect.centerx += self.speed[0] * time
-
-# definimos objeto Apple
-class Apple(pygame.sprite.Sprite):
-	def __init__(self):
-		pygame.sprite.Sprite.__init__(self)
-		self.image = carga_imagen("apple.png",-1)
-		self.rect = self.image.get_rect()
-		self.rect.centerx = WIDTH - (3*WIDTH/5)
-		self.rect.centery = HEIGHT / 4
-		self.speed = [0.5, -0.5]
-
-	def actualizar(self, time, pala_jug):
-		self.rect.centerx += self.speed[0] * time
-		self.rect.centery += self.speed[1] * time
-		if self.rect.left <= 0 or self.rect.right >= WIDTH:
-			self.speed[0] = -self.speed[0]
-			self.rect.centerx += self.speed[0] * time
-		if self.rect.top <= 0 or self.rect.bottom >= HEIGHT:
-			self.speed[1] = -self.speed[1]
-			self.rect.centery += self.speed[1] * time
-
-		if pygame.sprite.collide_rect(self, pala_jug):
-			self.rect.centerx += self.speed[0] * time
-
-# definimos objeto FreeBSD
-class Freebsd(pygame.sprite.Sprite):
-	def __init__(self):
-		pygame.sprite.Sprite.__init__(self)
-		self.image = carga_imagen("freebsd.png",-1)
-		self.rect = self.image.get_rect()
-		self.rect.centerx = WIDTH - (4*WIDTH/5)
-		self.rect.centery = HEIGHT / 2
-		self.speed = [0.5, -0.5]
-
-	def actualizar(self, time, pala_jug):
-		self.rect.centerx += self.speed[0] * time
-		self.rect.centery += self.speed[1] * time
-		if self.rect.left <= 0 or self.rect.right >= WIDTH:
-			self.speed[0] = -self.speed[0]
-			self.rect.centerx += self.speed[0] * time
-		if self.rect.top <= 0 or self.rect.bottom >= HEIGHT:
-			self.speed[1] = -self.speed[1]
-			self.rect.centery += self.speed[1] * time
-
-		if pygame.sprite.collide_rect(self, pala_jug):
-			self.rect.centerx += self.speed[0] * time
-
-# definimos jugador Tux
-class Tux(pygame.sprite.Sprite):
-	def __init__(self, x):
-		pygame.sprite.Sprite.__init__(self)
-		self.image = carga_imagen("tux.png",-1)
-		self.rect = self.image.get_rect()
-		self.rect.centerx = x
-		self.rect.centery = HEIGHT-50
-		self.speed = 0.5
-
-	def mover(self, time, keys):
-		if self.rect.left >= 0:
-			if keys[K_LEFT]:
-				self.rect.centerx -= self.speed * time
-		if self.rect.right <= WIDTH:
-			if keys[K_RIGHT]:
-				self.rect.centerx += self.speed * time
-
-# definimos función presionar cualquier tecla
-def waitForPlayerToPressKey():
-	while True:
-		for event in pygame.event.get():
-			if event.type == QUIT:
-				terminate()
-			elif event.type == KEYDOWN:
-				if event.key == K_ESCAPE: # presionar Esc sale del juego
-					terminate()
-				return
-
-#definimos terminate para salir del juego
-def terminate():
-	pygame.quit()
-	sys.exit()
-
-# definimos función dibujar texto
-def drawText(text, font, surface, x, y):
-	textobj = font.render(text, 1, TEXTCOLOR)
-	textrect = textobj.get_rect()
-	textrect.topleft = (x,y)
-	surface.blit(textobj, textrect)
-
-# definimos función cargar imagen
-def carga_imagen(name, colorkey=None):
-	fullname = os.path.join('img', name)
-	try:
-		image = pygame.image.load(fullname)
-	except pygame.error, message:
-		print 'No se puede cargar la imagen:', name
-		raise SystemExit, message
-	image = image.convert()
-	if colorkey is not None: 
-		if colorkey is -1: 
-			colorkey = image.get_at((0,0))
-		image.set_colorkey(colorkey, RLEACCEL)
-	return image
-
-# definimos función cargar fondo
-def carga_fondo(name, colorkey=None):
-	fullname = os.path.join('img', name)
-	try:
-		image = pygame.image.load(fullname) 
-	except pygame.error, message: 
-		print 'No se puede cargar la imagen:', name
-		raise SystemExit, message
-	image = image.convert()
-	return image
-
-def main():
-
-	while True:
-
-		screen = pygame.display.set_mode((WIDTH, HEIGHT))
-
-		# mostramos pantalla de inicio
-		screen.fill(BGCOLOR)
-		drawText('paGame 0.0.2', font, screen, (WIDTH/3), (HEIGHT/3))
-		drawText('Presione una tecla para continuar.', font, screen, (WIDTH/3) - 140, (HEIGHT/3) + 50)
-		drawText('Esc para salir', font, screen, (WIDTH/3) - 140, (HEIGHT/3) + 260)
+	
+			self.update_scores()
+			self.draw_game_over()
+	
+			# Restart the game
+			self.running = True
+	
+	def show_initial_screen(self):
+		''' Show the initial welcome screen '''
+		
+		self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+	
+		# Show initial screen
+		self.screen.fill(BGCOLOR)
+		self.drawText('paGame 0.0.2', self.font, self.screen, (WIDTH/3), (HEIGHT/3))
+		self.drawText('Press a key to continue.', self.font, self.screen, (WIDTH/3) - 140, (HEIGHT/3) + 50)
+		self.drawText('Esc to exit', self.font, self.screen, (WIDTH/3) - 140, (HEIGHT/3) + 260)
 		pygame.display.update()
-		waitForPlayerToPressKey()
+		self.wait_key()
+	
+	def check_collide(self):
+		''' Check collide for every system object '''
+		
+		if pygame.sprite.collide_rect(self.gnu, self.tux):
+			self.score = self.score + 1
+	
+		if pygame.sprite.collide_rect(self.windows, self.tux):
+			self.score = self.score - 1
+	
+		if pygame.sprite.collide_rect(self.apple, self.tux):
+			self.score = self.score - 1
+	
+		if pygame.sprite.collide_rect(self.freebsd, self.tux):
+			self.score = self.score + 1
+	
+	def draw_hud(self):
+		''' Draw current time and score on screen (HUD: Head Up Display) '''
 
-		# cargamos imagen de fondo
-		background_image = carga_fondo("fondo.bmp")
-
-		# variables de la partida
-		gnu = Gnu()
-		windos = Windos()
-		apple = Apple()
-		freebsd = Freebsd()
-		tux = Tux(100)
-		clock = pygame.time.Clock()
-
-		SCORE = 0
-		vivo = True
-		tiempo = 0
-
-		# mientras sigamos vivos...
-		while vivo == True:
-
-			# temporizador
-			time = clock.tick(40)
-			tiempo -= time
-			tiempo_real = 60+(tiempo/1000)
-
-			keys = pygame.key.get_pressed()
-
-			for event in pygame.event.get():
-				if event.type == QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
-					sys.exit(0)
-
-			# cargamos los objetos
-			gnu.actualizar(time, tux)
-			windos.actualizar(time, tux)
-			apple.actualizar(time, tux)
-			freebsd.actualizar(time, tux)
-			tux.mover(time, keys)
-			screen.blit(background_image, (0, 0))
-			screen.blit(gnu.image, gnu.rect)
-			screen.blit(windos.image, windos.rect)
-			screen.blit(apple.image, apple.rect)
-			screen.blit(freebsd.image, freebsd.rect)
-			screen.blit(tux.image, tux.rect)
-			pygame.display.flip()
-
-			# definimos los cambios de puntuación según objeto
-			if pygame.sprite.collide_rect(gnu, tux):
-				SCORE = SCORE + 1
-
-			if pygame.sprite.collide_rect(windos, tux):
-				SCORE = SCORE - 1
-
-			if pygame.sprite.collide_rect(apple, tux):
-				SCORE = SCORE - 1
-
-			if pygame.sprite.collide_rect(freebsd, tux):
-				SCORE = SCORE + 1
-
-			# dibujamos en pantalla el tiempo y la puntuación actuales
-			drawText('Libre Level: %s' % (SCORE), font, screen, 10, 10)
-			drawText('Tiempo: %s' % (tiempo_real), font, screen, 10, 50)
-
-			pygame.display.update()
-
-			# la partida termina si la puntuación o el tiempo son menores o iguales que -100 y 0
-#			if SCORE <= -100 or tiempo_real <= 55:
-			if SCORE <= -100 or tiempo_real <= 0:
-				vivo = False
-
-		# añadimos la puntuación a la lista, la ordenamos y borramos el valor más bajo
-		ranking.append(SCORE)
-		ranking.sort(reverse=True)
-		del ranking[5]
-
-		# pantalla de Game Over y ranking al finalizar la partida		
-		screen.fill(BGCOLOR)
-		drawText('GAME OVER', font, screen, (WIDTH/3), (HEIGHT - 470))
-		drawText('Su puntuacion ha sido %s' % SCORE, font, screen, (WIDTH/8) - 30, (HEIGHT - 420))
-		if SCORE <= 0: # si la puntuación es menor o igual que 0 eres más privativo
-			drawText('Eres mas privativo :(', font, screen, (WIDTH/8) - 30, (HEIGHT - 370))
-		elif SCORE > 0: # si la puntuación es mayor que 0 eres más libre
-			drawText('Eres mas libre :)', font, screen, (WIDTH/8) - 30, (HEIGHT - 370))
-		drawText('1. %s' % ranking[0], font, screen, (WIDTH/6) - 30, (HEIGHT/6) + 150)
-		drawText('2. %s' % ranking[1], font, screen, (WIDTH/6) - 30, (HEIGHT/6) + 200)
-		drawText('3. %s' % ranking[2], font, screen, (WIDTH/6) - 30, (HEIGHT/6) + 250)
-		drawText('4. %s' % ranking[3], font, screen, (WIDTH/6) - 30, (HEIGHT/6) + 300)
-		drawText('5. %s' % ranking[4], font, screen, (WIDTH/6) - 30, (HEIGHT/6) + 350)
+		self.drawText('Free level: %s' % (self.score), self.font, self.screen, 10, 10)
+		self.drawText('Time: %s' % (self.real_time), self.font, self.screen, 10, 50)
+	
 		pygame.display.update()
-		waitForPlayerToPressKey()
 
-		# si se reinicia el juego, volvemos a estar vivos
-		vivo = True
+	def check_finished_game(self):
+		''' The game finish if score or time are -100 or 0 '''
+		
+		if self.score <= -100 or self.real_time <= 0:
+			self.running = False
+		
+	def update_scores(self):
+		''' Add the score ordered to list and delete the most oldest value '''
+		
+		self.ranking.append(self.score)
+		self.ranking.sort(reverse=True)
+		del self.ranking[5]
+		
+	def draw_game_over(self):
+		''' Show the game over screen '''
+		
+		self.screen.fill(BGCOLOR)
+		self.drawText('GAME OVER', self.font, self.screen, (WIDTH/3), (HEIGHT - 470))
+		self.drawText('You score are %s' % self.score, self.font, self.screen, (WIDTH/8) - 30, (HEIGHT - 420))
+			
+		result_game_text = ('You are more free :)', 'You are more privative :(')[self.score <= 0]
+
+		self.drawText(result_game_text, self.font, self.screen, (WIDTH/8) - 30, (HEIGHT - 370))
+
+		for n in xrange(0, 5):
+			self.drawText('{0}. {1}'.format(n + 1, self.ranking[n]), self.font, self.screen, (WIDTH / 6) - 30, (HEIGHT / 6) + 150 + 50 * n)
+
+			
+		pygame.display.update()
+		self.wait_key()
+	
+	def check_exit(self):
+		''' Check if the user wants exit '''
+		
+		for event in self.events:
+			if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+				sys.exit(0)
+				
+	def wait_key(self):
+		''' Wait to user for press a key '''
+		
+		while True:
+			for event in self.events:
+				if event.type == pygame.QUIT or ():
+					self.terminate()
+				elif event.type == pygame.KEYDOWN:
+					if event.key == pygame.K_ESCAPE:
+						self.terminate()
+					else:
+						return
 
 if __name__ == '__main__':
-	pygame.init()
-	main()
-
+	Game().main()
